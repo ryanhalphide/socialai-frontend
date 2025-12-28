@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface HeaderProps {
   user?: {
@@ -29,6 +30,11 @@ interface HeaderProps {
 export function Header({ user, organization }: HeaderProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const { signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-6">
@@ -145,6 +151,7 @@ export function Header({ user, organization }: HeaderProps) {
                 </Link>
                 <hr className="my-2" />
                 <button
+                  onClick={handleSignOut}
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50"
                 >
                   <LogOut className="h-4 w-4" />
