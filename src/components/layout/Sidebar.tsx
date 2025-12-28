@@ -12,6 +12,7 @@ import {
   HelpCircle,
   ChevronLeft,
   ChevronRight,
+  Bot,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -22,6 +23,7 @@ interface SidebarProps {
 
 const navigationItems = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { name: 'AI Copilot', href: '/copilot', icon: Bot },
   { name: 'Calendar', href: '/calendar', icon: Calendar },
   { name: 'Content', href: '/content', icon: FileText },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },

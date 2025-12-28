@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { DashboardLayout } from './components/layout';
 import { Dashboard, Login, Register, Content, Calendar, Analytics, AIStudio } from './pages';
+import { Copilot } from './pages/Copilot';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -159,6 +160,14 @@ function AppRoutes() {
             <DashboardLayout>
               <AIStudio />
             </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/copilot"
+        element={
+          <ProtectedRoute>
+            <Copilot />
           </ProtectedRoute>
         }
       />
