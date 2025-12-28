@@ -11,6 +11,9 @@ import {
   Download,
   RefreshCw,
   AlertCircle,
+  ExternalLink,
+  Link2,
+  CheckCircle2,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 
@@ -40,6 +43,7 @@ export function AIStudio() {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [imageElapsedTime, setImageElapsedTime] = useState(0);
+  const [imageCopied, setImageCopied] = useState(false);
   const imageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Video generation state
@@ -52,6 +56,7 @@ export function AIStudio() {
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState('');
   const [videoElapsedTime, setVideoElapsedTime] = useState(0);
   const [videoProgress, setVideoProgress] = useState(0);
+  const [videoCopied, setVideoCopied] = useState(false);
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -295,6 +300,64 @@ export function AIStudio() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleCopyVideoUrl = () => {
+    if (generatedVideoUrl) {
+      navigator.clipboard.writeText(generatedVideoUrl);
+      setVideoCopied(true);
+      setTimeout(() => setVideoCopied(false), 2000);
+    }
+  };
+
+  const handleDownloadVideo = () => {
+    if (generatedVideoUrl) {
+      const link = document.createElement('a');
+      link.href = generatedVideoUrl;
+      link.download = `socialsync-video-${Date.now()}.mp4`;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const platformLinks: Record<Platform, string> = {
+    instagram: 'https://www.instagram.com/',
+    facebook: 'https://www.facebook.com/',
+    twitter: 'https://twitter.com/compose/tweet',
+    linkedin: 'https://www.linkedin.com/feed/',
+    youtube: 'https://studio.youtube.com/',
+  };
+
+  const handlePostToSocial = (platform: Platform, mediaUrl?: string) => {
+    // Copy media URL to clipboard first
+    const url = mediaUrl || generatedVideoUrl || generatedImageUrl;
+    if (url) {
+      navigator.clipboard.writeText(url);
+    }
+    // Open platform in new tab
+    window.open(platformLinks[platform], '_blank');
+  };
+
+  const handleCopyImageUrl = () => {
+    if (generatedImageUrl) {
+      navigator.clipboard.writeText(generatedImageUrl);
+      setImageCopied(true);
+      setTimeout(() => setImageCopied(false), 2000);
+    }
+  };
+
+  const handleDownloadImage = () => {
+    if (generatedImageUrl) {
+      const link = document.createElement('a');
+      link.href = generatedImageUrl;
+      link.download = `socialsync-image-${Date.now()}.png`;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   const tabs = [
     { id: 'text' as const, label: 'Text', icon: FileText },
     { id: 'image' as const, label: 'Image', icon: Image },
@@ -516,26 +579,79 @@ export function AIStudio() {
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Generated Image</h2>
-              {generatedImageUrl && (
-                <a
-                  href={generatedImageUrl}
-                  download="generated-image.png"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Button variant="ghost" size="sm">
-                    <Download className="h-4 w-4" />
-                  </Button>
-                </a>
-              )}
             </div>
             <div className="min-h-[300px] bg-gray-50 rounded-lg flex items-center justify-center overflow-hidden p-6">
               {generatedImageUrl ? (
-                <img
-                  src={generatedImageUrl}
-                  alt="Generated"
-                  className="max-w-full max-h-[400px] object-contain rounded-lg"
-                />
+                <div className="w-full space-y-6">
+                  {/* Image Display */}
+                  <img
+                    src={generatedImageUrl}
+                    alt="Generated"
+                    className="max-w-full max-h-[350px] object-contain rounded-lg shadow-lg mx-auto"
+                  />
+
+                  {/* Success Badge */}
+                  <div className="flex items-center justify-center gap-2 text-green-600 bg-green-50 py-2 px-4 rounded-full w-fit mx-auto">
+                    <CheckCircle2 className="h-5 w-5" />
+                    <span className="font-medium">Image Ready!</span>
+                    <span className="text-green-500 text-sm">({imageElapsedTime}s)</span>
+                  </div>
+
+                  {/* Primary Action Buttons */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button
+                      onClick={handleDownloadImage}
+                      className="w-full bg-primary-600 hover:bg-primary-700 text-white py-3 text-base font-semibold"
+                    >
+                      <Download className="h-5 w-5 mr-2" />
+                      Download Image
+                    </Button>
+                    <Button
+                      onClick={handleCopyImageUrl}
+                      variant="secondary"
+                      className="w-full py-3 text-base font-semibold"
+                    >
+                      {imageCopied ? (
+                        <>
+                          <Check className="h-5 w-5 mr-2 text-green-600" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Link2 className="h-5 w-5 mr-2" />
+                          Copy URL
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Post to Social Section */}
+                  <div className="border-t border-gray-200 pt-4">
+                    <p className="text-sm font-medium text-gray-700 mb-3 text-center">
+                      Ready to share? Post to your platforms:
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {(['instagram', 'facebook', 'twitter', 'linkedin'] as Platform[]).map((platform) => (
+                        <button
+                          key={platform}
+                          onClick={() => handlePostToSocial(platform, generatedImageUrl)}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all hover:scale-105 ${
+                            platform === 'instagram' ? 'border-pink-300 bg-pink-50 hover:bg-pink-100 text-pink-700' :
+                            platform === 'facebook' ? 'border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700' :
+                            platform === 'twitter' ? 'border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-700' :
+                            'border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-700'
+                          }`}
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          <span className="capitalize font-medium">{platform}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-400 text-center mt-3">
+                      Image URL will be copied. Download and upload to your platform.
+                    </p>
+                  </div>
+                </div>
               ) : isGeneratingImage ? (
                 <div className="w-full max-w-md space-y-4">
                   {/* Progress bar */}
@@ -647,35 +763,83 @@ export function AIStudio() {
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Video Result</h2>
-              {generatedVideoUrl && (
-                <a
-                  href={generatedVideoUrl}
-                  download="generated-video.mp4"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Button variant="ghost" size="sm">
-                    <Download className="h-4 w-4" />
-                  </Button>
-                </a>
-              )}
             </div>
             <div className="min-h-[300px] bg-gray-50 rounded-lg flex items-center justify-center p-6 overflow-hidden">
               {generatedVideoUrl ? (
-                <div className="w-full space-y-4">
+                <div className="w-full space-y-6">
+                  {/* Video Player */}
                   <video
                     src={generatedVideoUrl}
                     controls
                     autoPlay
                     loop
-                    className="w-full max-h-[400px] rounded-lg"
+                    className="w-full max-h-[350px] rounded-lg shadow-lg"
                   >
                     Your browser does not support the video tag.
                   </video>
-                  <p className="text-sm text-green-600 text-center flex items-center justify-center gap-2">
-                    <Check className="h-4 w-4" />
-                    {videoStatus} ({videoElapsedTime}s)
-                  </p>
+
+                  {/* Success Badge */}
+                  <div className="flex items-center justify-center gap-2 text-green-600 bg-green-50 py-2 px-4 rounded-full w-fit mx-auto">
+                    <CheckCircle2 className="h-5 w-5" />
+                    <span className="font-medium">Video Ready!</span>
+                    <span className="text-green-500 text-sm">({videoElapsedTime}s)</span>
+                  </div>
+
+                  {/* Primary Action Buttons */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button
+                      onClick={handleDownloadVideo}
+                      className="w-full bg-primary-600 hover:bg-primary-700 text-white py-3 text-base font-semibold"
+                    >
+                      <Download className="h-5 w-5 mr-2" />
+                      Download Video
+                    </Button>
+                    <Button
+                      onClick={handleCopyVideoUrl}
+                      variant="secondary"
+                      className="w-full py-3 text-base font-semibold"
+                    >
+                      {videoCopied ? (
+                        <>
+                          <Check className="h-5 w-5 mr-2 text-green-600" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Link2 className="h-5 w-5 mr-2" />
+                          Copy URL
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Post to Social Section */}
+                  <div className="border-t border-gray-200 pt-4">
+                    <p className="text-sm font-medium text-gray-700 mb-3 text-center">
+                      Ready to share? Post to your platforms:
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {(['instagram', 'facebook', 'twitter', 'linkedin', 'youtube'] as Platform[]).map((platform) => (
+                        <button
+                          key={platform}
+                          onClick={() => handlePostToSocial(platform)}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all hover:scale-105 ${
+                            platform === 'instagram' ? 'border-pink-300 bg-pink-50 hover:bg-pink-100 text-pink-700' :
+                            platform === 'facebook' ? 'border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700' :
+                            platform === 'twitter' ? 'border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-700' :
+                            platform === 'linkedin' ? 'border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-700' :
+                            'border-red-300 bg-red-50 hover:bg-red-100 text-red-700'
+                          }`}
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          <span className="capitalize font-medium">{platform}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-400 text-center mt-3">
+                      Video URL will be copied. Download and upload to your platform.
+                    </p>
+                  </div>
                 </div>
               ) : isGeneratingVideo ? (
                 <div className="w-full max-w-md space-y-4">
