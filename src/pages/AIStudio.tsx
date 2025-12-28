@@ -48,8 +48,7 @@ export function AIStudio() {
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState('');
-  const [videoPredictionId, setVideoPredictionId] = useState<string | null>(null);
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Hashtag generation state
   const [hashtagPrompt, setHashtagPrompt] = useState('');
@@ -193,7 +192,6 @@ export function AIStudio() {
 
     // Clear previous results
     setGeneratedVideoUrl('');
-    setVideoPredictionId(null);
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
@@ -221,7 +219,6 @@ export function AIStudio() {
       }
 
       const data = await response.json();
-      setVideoPredictionId(data.id);
       setVideoStatus('Generating video... This may take 1-2 minutes.');
 
       // Start polling for video status every 5 seconds
