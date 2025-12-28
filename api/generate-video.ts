@@ -42,7 +42,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(500).json({ error: 'Replicate API token not configured' });
       }
 
-      // Using Stable Video Diffusion or similar model
+      // Using minimax/video-01 - a text-to-video model
+      // Version as of Dec 2024
+      const minimaxVideoVersion = 'c8bcc4751328608bb75043b3af7bed4eabcf1a6c0a478d50a4cf57fa04bd5101';
+
       const response = await fetch('https://api.replicate.com/v1/predictions', {
         method: 'POST',
         headers: {
@@ -50,22 +53,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          // Using a text-to-video model
-          model: 'anotherjesse/zeroscope-v2-xl',
+          version: minimaxVideoVersion,
           input: {
-            prompt: `${prompt}, high quality, smooth motion, professional`,
-            num_frames: duration === 5 ? 24 * 5 : 24 * 8,
-            fps: 24,
-            width: aspectRatio === '9:16' ? 576 : 1024,
-            height: aspectRatio === '9:16' ? 1024 : 576,
+            prompt: `${prompt}, high quality, smooth motion, professional cinematography`,
+            prompt_optimizer: true,
           },
         }),
       });
 
       if (!response.ok) {
-        const error = await response.text();
-        console.error('Replicate API error:', error);
-        return res.status(500).json({ error: 'Failed to start video generation' });
+        const errorText = await response.text();
+        console.error('Replicate API error:', errorText);
+
+        // Parse error for better user feedback
+        try {
+          const errorJson = JSON.parse(errorText);
+          if (errorJson.title === 'Insufficient credit') {
+            return res.status(402).json({
+              error: 'Video generation service requires billing setup',
+              details: 'Please add credits to the Replicate account'
+            });
+          }
+          return res.status(response.status).json({
+            error: 'Failed to start video generation',
+            details: errorJson.detail || errorJson.title || errorText
+          });
+        } catch {
+          return res.status(500).json({ error: 'Failed to start video generation', details: errorText });
+        }
       }
 
       const prediction = await response.json();
