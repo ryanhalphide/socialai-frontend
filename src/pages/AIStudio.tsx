@@ -60,7 +60,7 @@ export function AIStudio() {
   // Poll for video status
   const pollVideoStatus = useCallback(async (predictionId: string) => {
     try {
-      const response = await fetch(`/api/video-status?id=${predictionId}`);
+      const response = await fetch(`/api/videoStatus?id=${predictionId}`);
       if (!response.ok) {
         throw new Error('Failed to fetch video status');
       }
