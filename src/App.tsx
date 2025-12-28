@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { DashboardLayout } from './components/layout';
-import { Dashboard, Login, Register, Content, Calendar, Analytics } from './pages';
+import { Dashboard, Login, Register, Content, Calendar, Analytics, AIStudio } from './pages';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -52,17 +52,6 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 }
 
 // Placeholder pages for routes not yet implemented
-function AIStudioPage() {
-  return (
-    <DashboardLayout>
-      <div className="text-center py-20">
-        <h1 className="text-2xl font-bold text-gray-900">AI Studio</h1>
-        <p className="text-gray-500 mt-2">AI-powered content creation coming soon...</p>
-      </div>
-    </DashboardLayout>
-  );
-}
-
 function RecommendationsPage() {
   return (
     <DashboardLayout>
@@ -167,7 +156,9 @@ function AppRoutes() {
         path="/ai-studio"
         element={
           <ProtectedRoute>
-            <AIStudioPage />
+            <DashboardLayout>
+              <AIStudio />
+            </DashboardLayout>
           </ProtectedRoute>
         }
       />

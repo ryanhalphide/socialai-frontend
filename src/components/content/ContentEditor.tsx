@@ -16,6 +16,7 @@ import {
   Youtube,
   AlertCircle,
   CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -68,6 +69,9 @@ export function ContentEditor({
     initialData?.scheduledAt?.split('T')[1]?.slice(0, 5) || ''
   );
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [showAiPromptInput, setShowAiPromptInput] = useState(false);
 
   const togglePlatform = (platformId: string) => {
     if (selectedPlatforms.includes(platformId)) {
@@ -90,13 +94,57 @@ export function ContentEditor({
   const isOverLimit = content.length > characterLimit;
 
   const handleGenerateAI = async () => {
+    if (!showAiPromptInput) {
+      setShowAiPromptInput(true);
+      return;
+    }
+
+    if (!aiPrompt.trim()) {
+      setAiError('Please enter a prompt for AI generation');
+      return;
+    }
+
     setIsGeneratingAI(true);
-    // Simulate AI content generation
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    setContent(
-      "🚀 Exciting news! We're thrilled to share our latest innovation that's changing the game. Stay tuned for more updates! #Innovation #Tech #Startup"
-    );
-    setIsGeneratingAI(false);
+    setAiError(null);
+
+    try {
+      // Use the first selected platform for generation
+      const primaryPlatform = selectedPlatforms[0] || 'instagram';
+
+      const response = await fetch('/api/generate-text', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: aiPrompt,
+          platform: primaryPlatform,
+          contentType: 'post',
+          tone: 'professional',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate content');
+      }
+
+      const data = await response.json();
+      setContent(data.content);
+      setShowAiPromptInput(false);
+      setAiPrompt('');
+    } catch (error) {
+      console.error('AI generation error:', error);
+      setAiError(error instanceof Error ? error.message : 'Failed to generate content');
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
+  const handleCancelAiPrompt = () => {
+    setShowAiPromptInput(false);
+    setAiPrompt('');
+    setAiError(null);
   };
 
   const handleSave = (asDraft: boolean) => {
@@ -166,13 +214,68 @@ export function ContentEditor({
               variant="ghost"
               size="sm"
               onClick={handleGenerateAI}
-              isLoading={isGeneratingAI}
+              disabled={isGeneratingAI}
               className="text-primary-600"
             >
-              <Sparkles className="h-4 w-4 mr-1" />
-              Generate with AI
+              {isGeneratingAI ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4 mr-1" />
+              )}
+              {isGeneratingAI ? 'Generating...' : 'Generate with AI'}
             </Button>
           </div>
+
+          {/* AI Prompt Input */}
+          {showAiPromptInput && (
+            <div className="mb-3 p-3 bg-primary-50 border border-primary-200 rounded-lg">
+              <label className="block text-sm font-medium text-primary-700 mb-2">
+                What would you like to post about?
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleGenerateAI()}
+                  placeholder="e.g., Announce our new product launch with excitement"
+                  className="flex-1 px-3 py-2 rounded-lg border border-primary-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  disabled={isGeneratingAI}
+                  autoFocus
+                />
+                <Button
+                  size="sm"
+                  onClick={handleGenerateAI}
+                  disabled={isGeneratingAI || !aiPrompt.trim()}
+                >
+                  {isGeneratingAI ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    'Generate'
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCancelAiPrompt}
+                  disabled={isGeneratingAI}
+                >
+                  Cancel
+                </Button>
+              </div>
+              {aiError && (
+                <p className="mt-2 text-xs text-red-600 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {aiError}
+                </p>
+              )}
+              <p className="mt-2 text-xs text-primary-600">
+                Generating for: {selectedPlatforms.map(p =>
+                  platformOptions.find(opt => opt.id === p)?.name
+                ).join(', ')}
+              </p>
+            </div>
+          )}
           <div className="relative">
             <textarea
               value={content}

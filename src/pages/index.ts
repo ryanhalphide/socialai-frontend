@@ -4,3 +4,4 @@ export { Register } from './Register';
 export { Content } from './Content';
 export { Calendar } from './Calendar';
 export { Analytics } from './Analytics';
+export { AIStudio } from './AIStudio';
