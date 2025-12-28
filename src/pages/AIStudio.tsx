@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import {
   Sparkles,
   Image,
@@ -47,12 +47,50 @@ export function AIStudio() {
   const [videoStatus, setVideoStatus] = useState<string>('');
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [generatedVideoUrl, setGeneratedVideoUrl] = useState('');
+  const [videoPredictionId, setVideoPredictionId] = useState<string | null>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Hashtag generation state
   const [hashtagPrompt, setHashtagPrompt] = useState('');
   const [generatedHashtags, setGeneratedHashtags] = useState('');
   const [isGeneratingHashtags, setIsGeneratingHashtags] = useState(false);
   const [hashtagError, setHashtagError] = useState<string | null>(null);
+
+  // Poll for video status
+  const pollVideoStatus = useCallback(async (predictionId: string) => {
+    try {
+      const response = await fetch(`/api/video-status?id=${predictionId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch video status');
+      }
+
+      const data = await response.json();
+
+      if (data.status === 'succeeded' && data.videoUrl) {
+        setGeneratedVideoUrl(data.videoUrl);
+        setVideoStatus('Video generated successfully!');
+        setIsGeneratingVideo(false);
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+      } else if (data.status === 'failed') {
+        setVideoError(data.error || 'Video generation failed');
+        setVideoStatus('');
+        setIsGeneratingVideo(false);
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+      } else {
+        // Still processing
+        setVideoStatus('Generating video... This may take 1-2 minutes.');
+      }
+    } catch (error) {
+      console.error('Error polling video status:', error);
+    }
+  }, []);
 
   const handleGenerateText = async () => {
     if (!textPrompt.trim()) return;
@@ -153,6 +191,14 @@ export function AIStudio() {
   const handleGenerateVideo = async () => {
     if (!videoPrompt.trim()) return;
 
+    // Clear previous results
+    setGeneratedVideoUrl('');
+    setVideoPredictionId(null);
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+
     setIsGeneratingVideo(true);
     setVideoError(null);
     setVideoStatus('Starting video generation...');
@@ -175,11 +221,19 @@ export function AIStudio() {
       }
 
       const data = await response.json();
-      setVideoStatus(`Video generation started! ${data.message}`);
+      setVideoPredictionId(data.id);
+      setVideoStatus('Generating video... This may take 1-2 minutes.');
+
+      // Start polling for video status every 5 seconds
+      pollingIntervalRef.current = setInterval(() => {
+        pollVideoStatus(data.id);
+      }, 5000);
+
+      // Also poll immediately after a short delay
+      setTimeout(() => pollVideoStatus(data.id), 2000);
     } catch (error) {
       setVideoError(error instanceof Error ? error.message : 'Failed to generate video');
       setVideoStatus('');
-    } finally {
       setIsGeneratingVideo(false);
     }
   };
@@ -516,9 +570,39 @@ export function AIStudio() {
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Video Status</h2>
-            <div className="min-h-[300px] bg-gray-50 rounded-lg flex items-center justify-center p-6">
-              {videoStatus ? (
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Video Result</h2>
+              {generatedVideoUrl && (
+                <a
+                  href={generatedVideoUrl}
+                  download="generated-video.mp4"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="ghost" size="sm">
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </a>
+              )}
+            </div>
+            <div className="min-h-[300px] bg-gray-50 rounded-lg flex items-center justify-center p-6 overflow-hidden">
+              {generatedVideoUrl ? (
+                <div className="w-full space-y-4">
+                  <video
+                    src={generatedVideoUrl}
+                    controls
+                    autoPlay
+                    loop
+                    className="w-full max-h-[400px] rounded-lg"
+                  >
+                    Your browser does not support the video tag.
+                  </video>
+                  <p className="text-sm text-green-600 text-center flex items-center justify-center gap-2">
+                    <Check className="h-4 w-4" />
+                    {videoStatus}
+                  </p>
+                </div>
+              ) : isGeneratingVideo || videoStatus ? (
                 <div className="text-center space-y-4">
                   <Loader2 className="h-12 w-12 mx-auto text-primary-600 animate-spin" />
                   <p className="text-sm text-gray-600">{videoStatus}</p>
