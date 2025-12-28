@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Sparkles,
   Image,
@@ -39,6 +39,8 @@ export function AIStudio() {
   const [generatedImageUrl, setGeneratedImageUrl] = useState('');
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [imageElapsedTime, setImageElapsedTime] = useState(0);
+  const imageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Video generation state
   const [videoPrompt, setVideoPrompt] = useState('');
@@ -48,13 +50,37 @@ export function AIStudio() {
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState('');
+  const [videoElapsedTime, setVideoElapsedTime] = useState(0);
+  const [videoProgress, setVideoProgress] = useState(0);
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Hashtag generation state
   const [hashtagPrompt, setHashtagPrompt] = useState('');
   const [generatedHashtags, setGeneratedHashtags] = useState('');
   const [isGeneratingHashtags, setIsGeneratingHashtags] = useState(false);
   const [hashtagError, setHashtagError] = useState<string | null>(null);
+
+  // Cleanup intervals on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (imageTimerRef.current) clearInterval(imageTimerRef.current);
+    };
+  }, []);
+
+  // Helper to stop all video timers
+  const stopVideoTimers = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+  }, []);
 
   // Poll for video status
   const pollVideoStatus = useCallback(async (predictionId: string) => {
@@ -69,27 +95,32 @@ export function AIStudio() {
       if (data.status === 'succeeded' && data.videoUrl) {
         setGeneratedVideoUrl(data.videoUrl);
         setVideoStatus('Video generated successfully!');
+        setVideoProgress(100);
         setIsGeneratingVideo(false);
-        if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
-          pollingIntervalRef.current = null;
-        }
+        stopVideoTimers();
       } else if (data.status === 'failed') {
         setVideoError(data.error || 'Video generation failed');
         setVideoStatus('');
         setIsGeneratingVideo(false);
-        if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
-          pollingIntervalRef.current = null;
-        }
+        stopVideoTimers();
       } else {
-        // Still processing
-        setVideoStatus('Generating video... This may take 1-2 minutes.');
+        // Still processing - update status with logs if available
+        const logLines = data.logs?.split('\n').filter((l: string) => l.trim()) || [];
+        const lastLog = logLines[logLines.length - 1] || '';
+        if (lastLog.includes('Generating') || lastLog.includes('generating')) {
+          setVideoStatus('Generating frames...');
+        } else if (lastLog.includes('Retrieving') || lastLog.includes('Downloading')) {
+          setVideoStatus('Finalizing video...');
+          setVideoProgress(90);
+        } else {
+          setVideoStatus('Processing video...');
+        }
       }
     } catch (error) {
       console.error('Error polling video status:', error);
+      // Don't stop on network errors, just log and continue polling
     }
-  }, []);
+  }, [stopVideoTimers]);
 
   const handleGenerateText = async () => {
     if (!textPrompt.trim()) return;
@@ -160,6 +191,12 @@ export function AIStudio() {
 
     setIsGeneratingImage(true);
     setImageError(null);
+    setImageElapsedTime(0);
+
+    // Start elapsed time counter
+    imageTimerRef.current = setInterval(() => {
+      setImageElapsedTime(prev => prev + 1);
+    }, 1000);
 
     try {
       const response = await fetch('/api/generate-image', {
@@ -184,19 +221,23 @@ export function AIStudio() {
       setImageError(error instanceof Error ? error.message : 'Failed to generate image');
     } finally {
       setIsGeneratingImage(false);
+      if (imageTimerRef.current) {
+        clearInterval(imageTimerRef.current);
+        imageTimerRef.current = null;
+      }
     }
   };
 
   const handleGenerateVideo = async () => {
     if (!videoPrompt.trim()) return;
 
-    // Clear previous results
+    // Clear previous results and timers
     setGeneratedVideoUrl('');
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
+    stopVideoTimers();
 
+    // Reset progress state
+    setVideoElapsedTime(0);
+    setVideoProgress(0);
     setIsGeneratingVideo(true);
     setVideoError(null);
     setVideoStatus('Starting video generation...');
@@ -219,19 +260,32 @@ export function AIStudio() {
       }
 
       const data = await response.json();
-      setVideoStatus('Generating video... This may take 1-2 minutes.');
+      setVideoStatus('Processing video...');
 
-      // Start polling for video status every 5 seconds
+      // Start elapsed time counter (every second)
+      timerIntervalRef.current = setInterval(() => {
+        setVideoElapsedTime(prev => {
+          const newTime = prev + 1;
+          // Estimate progress based on typical 90-150 second generation time
+          // Cap at 85% until we get actual completion signal
+          const estimatedProgress = Math.min(85, Math.floor((newTime / 120) * 100));
+          setVideoProgress(estimatedProgress);
+          return newTime;
+        });
+      }, 1000);
+
+      // Start polling for video status every 3 seconds (faster feedback)
       pollingIntervalRef.current = setInterval(() => {
         pollVideoStatus(data.id);
-      }, 5000);
+      }, 3000);
 
-      // Also poll immediately after a short delay
-      setTimeout(() => pollVideoStatus(data.id), 2000);
+      // Poll immediately
+      setTimeout(() => pollVideoStatus(data.id), 1000);
     } catch (error) {
       setVideoError(error instanceof Error ? error.message : 'Failed to generate video');
       setVideoStatus('');
       setIsGeneratingVideo(false);
+      stopVideoTimers();
     }
   };
 
@@ -475,13 +529,37 @@ export function AIStudio() {
                 </a>
               )}
             </div>
-            <div className="min-h-[300px] bg-gray-50 rounded-lg flex items-center justify-center overflow-hidden">
+            <div className="min-h-[300px] bg-gray-50 rounded-lg flex items-center justify-center overflow-hidden p-6">
               {generatedImageUrl ? (
                 <img
                   src={generatedImageUrl}
                   alt="Generated"
                   className="max-w-full max-h-[400px] object-contain rounded-lg"
                 />
+              ) : isGeneratingImage ? (
+                <div className="w-full max-w-md space-y-4">
+                  {/* Progress bar */}
+                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                    <div
+                      className="bg-primary-600 h-3 rounded-full transition-all duration-500 ease-out animate-pulse"
+                      style={{ width: `${Math.min(90, imageElapsedTime * 3)}%` }}
+                    />
+                  </div>
+
+                  {/* Status and timer */}
+                  <div className="text-center space-y-2">
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-5 w-5 text-primary-600 animate-spin" />
+                      <span className="text-sm font-medium text-gray-700">Generating image...</span>
+                    </div>
+                    <div className="text-2xl font-mono font-bold text-primary-600">
+                      {imageElapsedTime}s
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      Typically completes in 10-30 seconds
+                    </p>
+                  </div>
+                </div>
               ) : (
                 <p className="text-sm text-gray-400 italic">
                   Your generated image will appear here...
@@ -596,16 +674,32 @@ export function AIStudio() {
                   </video>
                   <p className="text-sm text-green-600 text-center flex items-center justify-center gap-2">
                     <Check className="h-4 w-4" />
-                    {videoStatus}
+                    {videoStatus} ({videoElapsedTime}s)
                   </p>
                 </div>
-              ) : isGeneratingVideo || videoStatus ? (
-                <div className="text-center space-y-4">
-                  <Loader2 className="h-12 w-12 mx-auto text-primary-600 animate-spin" />
-                  <p className="text-sm text-gray-600">{videoStatus}</p>
-                  <p className="text-xs text-gray-400">
-                    Video generation typically takes 60-120 seconds. Check back shortly!
-                  </p>
+              ) : isGeneratingVideo ? (
+                <div className="w-full max-w-md space-y-4">
+                  {/* Progress bar */}
+                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                    <div
+                      className="bg-primary-600 h-3 rounded-full transition-all duration-500 ease-out"
+                      style={{ width: `${videoProgress}%` }}
+                    />
+                  </div>
+
+                  {/* Status and timer */}
+                  <div className="text-center space-y-2">
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-5 w-5 text-primary-600 animate-spin" />
+                      <span className="text-sm font-medium text-gray-700">{videoStatus}</span>
+                    </div>
+                    <div className="text-2xl font-mono font-bold text-primary-600">
+                      {Math.floor(videoElapsedTime / 60)}:{(videoElapsedTime % 60).toString().padStart(2, '0')}
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      Typically completes in 90-150 seconds
+                    </p>
+                  </div>
                 </div>
               ) : (
                 <p className="text-sm text-gray-400 italic text-center">
