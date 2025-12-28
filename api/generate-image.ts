@@ -58,10 +58,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const enhancedPrompt = `${prompt}, ${styleEnhancement}`;
     const size = aspectRatioSizes[aspectRatio] || aspectRatioSizes['1:1'];
 
-    // Use Flux Schnell for fast generation (free tier friendly)
-    const modelVersion = model === 'flux'
-      ? 'black-forest-labs/flux-schnell'
-      : 'stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b';
+    // Use Flux Schnell for fast generation
+    // Flux Schnell latest version (as of Dec 2024)
+    const fluxVersion = 'c846a69991daf4c0e5d016514849d14ee5b2e6846ce6b9d6f21369e564cfe51e';
+    const sdxlVersion = '39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b';
+
+    // Map our aspect ratio to Flux's supported aspect ratios
+    const fluxAspectRatios: Record<string, string> = {
+      '1:1': '1:1',
+      '16:9': '16:9',
+      '9:16': '9:16',
+      '4:5': '4:5',
+    };
 
     const response = await fetch('https://api.replicate.com/v1/predictions', {
       method: 'POST',
@@ -70,25 +78,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        version: model === 'flux' ? undefined : modelVersion.split(':')[1],
-        model: model === 'flux' ? modelVersion : undefined,
-        input: {
-          prompt: enhancedPrompt,
-          width: size.width,
-          height: size.height,
-          num_outputs: 1,
-          ...(model === 'sdxl' && {
-            negative_prompt: 'blurry, low quality, distorted, deformed',
-            num_inference_steps: 30,
-          }),
-        },
+        version: model === 'flux' ? fluxVersion : sdxlVersion,
+        input: model === 'flux'
+          ? {
+              prompt: enhancedPrompt,
+              aspect_ratio: fluxAspectRatios[aspectRatio] || '1:1',
+              num_outputs: 1,
+              output_format: 'webp',
+              output_quality: 90,
+            }
+          : {
+              prompt: enhancedPrompt,
+              width: size.width,
+              height: size.height,
+              num_outputs: 1,
+              negative_prompt: 'blurry, low quality, distorted, deformed',
+              num_inference_steps: 30,
+            },
       }),
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error('Replicate API error:', error);
-      return res.status(500).json({ error: 'Failed to start image generation' });
+      const errorText = await response.text();
+      console.error('Replicate API error:', errorText);
+
+      // Parse error for better user feedback
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.title === 'Insufficient credit') {
+          return res.status(402).json({
+            error: 'Image generation service requires billing setup',
+            details: 'Please add credits to the Replicate account'
+          });
+        }
+        return res.status(response.status).json({
+          error: 'Failed to start image generation',
+          details: errorJson.detail || errorJson.title || errorText
+        });
+      } catch {
+        return res.status(500).json({ error: 'Failed to start image generation', details: errorText });
+      }
     }
 
     const prediction = await response.json();
