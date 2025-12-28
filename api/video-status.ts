@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
+// Video status polling endpoint
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
