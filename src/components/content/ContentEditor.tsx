@@ -18,13 +18,20 @@ import {
   CheckCircle2,
   Loader2,
   TrendingUp,
+  FlaskConical,
+  ChevronRight,
+  Play,
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Badge } from '../ui/Badge';
 import { ViralScoreDisplay, ViralScoreBadge } from './ViralScoreDisplay';
+import { VariantEditor } from './VariantEditor';
+import { ABTestResults } from './ABTestResults';
 import { useViralScore } from '../../hooks/useViralScore';
+import { useABTest } from '../../hooks/useABTest';
+import type { PostVariant } from '../../types/abtest';
 
 interface ContentEditorProps {
   isOpen: boolean;
@@ -76,8 +83,26 @@ export function ContentEditor({
   const [aiPrompt, setAiPrompt] = useState('');
   const [showAiPromptInput, setShowAiPromptInput] = useState(false);
 
+  // A/B Testing state
+  const [showABTest, setShowABTest] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+
   // Viral score hook - automatically analyzes content as user types
   const primaryPlatform = selectedPlatforms[0] || 'instagram';
+
+  // A/B Testing hook
+  const {
+    variants,
+    results: abTestResults,
+    isGenerating: isGeneratingVariants,
+    addVariant,
+    updateVariant,
+    removeVariant,
+    duplicateVariant,
+    generateVariants,
+    simulateResults,
+    reset: resetABTest,
+  } = useABTest({ platform: primaryPlatform });
   const {
     data: viralScoreData,
     isLoading: isAnalyzingViralScore,
@@ -192,6 +217,37 @@ export function ContentEditor({
     }
   }, [content, primaryPlatform, resetViralScore]);
 
+  // A/B Testing handlers
+  const handleGenerateVariants = useCallback(async (types?: ('content' | 'hook' | 'cta' | 'hashtags' | 'tone' | 'length' | 'emoji')[]) => {
+    if (content.length < 20) return;
+    await generateVariants(content, types);
+  }, [content, generateVariants]);
+
+  const handleSelectWinner = useCallback((winner: PostVariant) => {
+    setContent(winner.content);
+    resetViralScore();
+    setShowResults(false);
+    setShowABTest(false);
+    resetABTest();
+  }, [resetViralScore, resetABTest]);
+
+  const handleRunSimulation = useCallback(() => {
+    if (variants.length >= 1) {
+      // Add original as control if not present
+      const hasControl = variants.some(v => v.name.toLowerCase().includes('control') || v.name.toLowerCase().includes('original'));
+      if (!hasControl && content) {
+        addVariant({
+          name: 'Original (Control)',
+          content: content,
+          type: 'content',
+          description: 'The original content for comparison',
+        });
+      }
+      simulateResults();
+      setShowResults(true);
+    }
+  }, [variants, content, addVariant, simulateResults]);
+
   const handleSave = (asDraft: boolean) => {
     const scheduledAt =
       scheduleDate && scheduleTime
@@ -209,10 +265,10 @@ export function ContentEditor({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Create Post" size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="Create Post" size={showABTest ? '2xl' : 'xl'}>
       <div className="flex gap-6">
         {/* Left Column - Editor */}
-        <div className="flex-1 space-y-6">
+        <div className={showABTest ? 'w-[400px] space-y-6' : 'flex-1 space-y-6'}>
           {/* Title */}
           <Input
             label="Title (internal reference)"
@@ -424,8 +480,77 @@ export function ContentEditor({
           </div>
         </div>
 
+        {/* Middle Column - A/B Testing (conditionally shown) */}
+        {showABTest && (
+          <div className="flex-1 min-w-0 space-y-4 border-l border-r border-gray-200 px-6">
+            {showResults && abTestResults ? (
+              <ABTestResults
+                results={abTestResults}
+                onSelectWinner={handleSelectWinner}
+              />
+            ) : (
+              <>
+                <VariantEditor
+                  originalContent={content}
+                  variants={variants}
+                  platform={primaryPlatform}
+                  isGenerating={isGeneratingVariants}
+                  onAddVariant={addVariant}
+                  onUpdateVariant={updateVariant}
+                  onRemoveVariant={removeVariant}
+                  onDuplicateVariant={duplicateVariant}
+                  onGenerateVariants={handleGenerateVariants}
+                  maxVariants={5}
+                />
+
+                {/* Run Test Button */}
+                {variants.length >= 1 && (
+                  <button
+                    onClick={handleRunSimulation}
+                    className="w-full py-3 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white font-medium flex items-center justify-center gap-2 hover:from-green-600 hover:to-emerald-600 transition-all shadow-md hover:shadow-lg"
+                  >
+                    <Play className="h-4 w-4" />
+                    Simulate A/B Test Results
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {/* Right Column - Viral Score & Preview */}
-        <div className="w-80 space-y-4">
+        <div className={showABTest ? 'w-72 space-y-4' : 'w-80 space-y-4'}>
+          {/* A/B Test Toggle */}
+          <button
+            onClick={() => {
+              setShowABTest(!showABTest);
+              if (showABTest) {
+                setShowResults(false);
+              }
+            }}
+            disabled={content.length < 20}
+            className={`w-full py-2.5 px-4 rounded-lg border-2 border-dashed flex items-center justify-between transition-all ${
+              showABTest
+                ? 'border-purple-300 bg-purple-50 text-purple-700'
+                : content.length < 20
+                ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                : 'border-gray-300 bg-white text-gray-600 hover:border-purple-300 hover:bg-purple-50 hover:text-purple-700'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <FlaskConical className="h-4 w-4" />
+              <span className="text-sm font-medium">
+                {showABTest ? 'Hide A/B Testing' : 'A/B Test Variants'}
+              </span>
+              {variants.length > 0 && !showABTest && (
+                <Badge variant="secondary" className="text-xs">
+                  {variants.length}
+                </Badge>
+              )}
+            </span>
+            <ChevronRight className={`h-4 w-4 transition-transform ${showABTest ? 'rotate-180' : ''}`} />
+          </button>
+
           {/* Viral Score Panel */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -438,33 +563,35 @@ export function ContentEditor({
               data={viralScoreData}
               isLoading={isAnalyzingViralScore}
               error={viralScoreError}
-              compact={false}
+              compact={showABTest}
               onApplySuggestion={handleApplySuggestion}
             />
           </div>
 
           {/* Preview */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Preview
-            </label>
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {selectedPlatforms.map((platformId) => {
-                const platform = platformOptions.find((p) => p.id === platformId);
-                if (!platform) return null;
-                return (
-                  <Badge key={platformId} variant="secondary">
-                    {platform.name}
-                  </Badge>
-                );
-              })}
+          {!showABTest && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Preview
+              </label>
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {selectedPlatforms.map((platformId) => {
+                  const platform = platformOptions.find((p) => p.id === platformId);
+                  if (!platform) return null;
+                  return (
+                    <Badge key={platformId} variant="secondary">
+                      {platform.name}
+                    </Badge>
+                  );
+                })}
+              </div>
+              <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200 max-h-40 overflow-y-auto">
+                <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                  {content || 'Your content preview will appear here...'}
+                </p>
+              </div>
             </div>
-            <div className="mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200 max-h-40 overflow-y-auto">
-              <p className="text-sm text-gray-600 whitespace-pre-wrap">
-                {content || 'Your content preview will appear here...'}
-              </p>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
