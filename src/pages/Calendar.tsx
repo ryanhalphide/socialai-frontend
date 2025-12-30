@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -8,11 +8,13 @@ import {
   Twitter,
   Linkedin,
   Youtube,
+  Loader2,
 } from 'lucide-react';
 import { DashboardLayout } from '../components/layout';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { ContentEditor } from '../components/content';
+import { useScheduledPosts, useCreatePost } from '../hooks/convex/usePosts';
 
 const platformIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   instagram: Instagram,
@@ -30,56 +32,33 @@ const platformColors: Record<string, string> = {
   youtube: 'bg-red-600',
 };
 
-// Mock scheduled posts
-const scheduledPosts = [
-  {
-    id: '1',
-    title: 'Product Launch',
-    time: '10:00 AM',
-    platforms: ['instagram', 'facebook'],
-    date: '2024-01-20',
-  },
-  {
-    id: '2',
-    title: 'Weekly Tips',
-    time: '2:00 PM',
-    platforms: ['twitter'],
-    date: '2024-01-20',
-  },
-  {
-    id: '3',
-    title: 'Team Spotlight',
-    time: '11:00 AM',
-    platforms: ['instagram', 'linkedin'],
-    date: '2024-01-22',
-  },
-  {
-    id: '4',
-    title: 'Industry News',
-    time: '9:00 AM',
-    platforms: ['twitter', 'linkedin'],
-    date: '2024-01-23',
-  },
-  {
-    id: '5',
-    title: 'Customer Story',
-    time: '3:00 PM',
-    platforms: ['facebook', 'instagram'],
-    date: '2024-01-25',
-  },
-  {
-    id: '6',
-    title: 'Behind the Scenes',
-    time: '12:00 PM',
-    platforms: ['instagram'],
-    date: '2024-01-26',
-  },
-];
-
 export function Calendar() {
-  const [currentDate, setCurrentDate] = useState(new Date(2024, 0, 1)); // January 2024
+  const [currentDate, setCurrentDate] = useState(new Date()); // Start with current month
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+
+  // Convex data
+  const rawScheduledPosts = useScheduledPosts();
+  const createPost = useCreatePost();
+
+  // Transform posts to calendar format
+  type RawPost = { _id: string; title?: string; content: string; platforms: string[]; scheduledAt?: number };
+  const scheduledPosts = useMemo(() => {
+    if (!rawScheduledPosts) return [];
+    return rawScheduledPosts.map((post: RawPost) => {
+      const scheduledDate = post.scheduledAt ? new Date(post.scheduledAt) : new Date();
+      return {
+        id: post._id,
+        title: post.title || post.content.slice(0, 30) + '...',
+        time: scheduledDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+        platforms: post.platforms,
+        date: scheduledDate.toISOString().split('T')[0],
+        scheduledAt: post.scheduledAt,
+      };
+    });
+  }, [rawScheduledPosts]);
+
+  const isLoading = rawScheduledPosts === undefined;
 
   const daysInMonth = new Date(
     currentDate.getFullYear(),
@@ -132,17 +111,42 @@ export function Calendar() {
     return `${currentDate.getFullYear()}-${month}-${dayStr}`;
   };
 
-  const getPostsForDay = (day: number) => {
+  type ScheduledPost = { id: string; title: string; time: string; platforms: string[]; date: string; scheduledAt?: number };
+  const getPostsForDay = (day: number): ScheduledPost[] => {
     const dateKey = formatDateKey(day);
-    return scheduledPosts.filter((post) => post.date === dateKey);
+    return scheduledPosts.filter((post: ScheduledPost) => post.date === dateKey);
   };
 
   const handleDateClick = (day: number) => {
     setSelectedDate(formatDateKey(day));
   };
 
-  const handleSave = (data: any) => {
-    console.log('Save:', data);
+  const handleSave = async (data: {
+    title?: string;
+    content: string;
+    platforms: string[];
+    status: string;
+    scheduledAt?: string;
+    mediaUrls?: string[];
+    mediaType?: string;
+    hashtags?: string[];
+  }) => {
+    try {
+      await createPost({
+        title: data.title,
+        content: data.content,
+        platforms: data.platforms,
+        status: data.scheduledAt ? 'scheduled' : 'draft',
+        scheduledAt: data.scheduledAt ? new Date(data.scheduledAt).getTime() : undefined,
+        mediaUrls: data.mediaUrls,
+        mediaType: data.mediaType,
+        hashtags: data.hashtags,
+        wasAiGenerated: false,
+      });
+      setIsEditorOpen(false);
+    } catch (error) {
+      console.error('Failed to save post:', error);
+    }
   };
 
   // Generate calendar grid
@@ -163,9 +167,19 @@ export function Calendar() {
     );
   };
 
-  const selectedDatePosts = selectedDate
-    ? scheduledPosts.filter((post) => post.date === selectedDate)
+  const selectedDatePosts: ScheduledPost[] = selectedDate
+    ? scheduledPosts.filter((post: ScheduledPost) => post.date === selectedDate)
     : [];
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -260,13 +274,13 @@ export function Calendar() {
 
                       {/* Posts Preview */}
                       <div className="mt-1 space-y-1">
-                        {posts.slice(0, 2).map((post) => (
+                        {posts.slice(0, 2).map((post: ScheduledPost) => (
                           <div
                             key={post.id}
                             className="flex items-center gap-1 p-1 bg-white rounded text-xs shadow-sm"
                           >
                             <div className="flex -space-x-1">
-                              {post.platforms.slice(0, 2).map((platform) => {
+                              {post.platforms.slice(0, 2).map((platform: string) => {
                                 const Icon = platformIcons[platform];
                                 return Icon ? (
                                   <div
@@ -310,7 +324,7 @@ export function Calendar() {
 
             {selectedDatePosts.length > 0 ? (
               <div className="space-y-3">
-                {selectedDatePosts.map((post) => (
+                {selectedDatePosts.map((post: ScheduledPost) => (
                   <div
                     key={post.id}
                     className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
@@ -324,7 +338,7 @@ export function Calendar() {
                       </Badge>
                     </div>
                     <div className="flex items-center gap-1">
-                      {post.platforms.map((platform) => {
+                      {post.platforms.map((platform: string) => {
                         const Icon = platformIcons[platform];
                         return Icon ? (
                           <div
@@ -365,7 +379,7 @@ export function Calendar() {
                 Upcoming Posts
               </h4>
               <div className="space-y-2">
-                {scheduledPosts.slice(0, 4).map((post) => (
+                {scheduledPosts.slice(0, 4).map((post: ScheduledPost) => (
                   <div
                     key={post.id}
                     className="flex items-center justify-between text-sm"

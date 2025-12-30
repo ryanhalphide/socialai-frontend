@@ -1,88 +1,13 @@
-import { useState } from 'react';
-import { Plus, List, LayoutGrid } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, List, LayoutGrid, Loader2 } from 'lucide-react';
 import { DashboardLayout } from '../components/layout';
 import { Button } from '../components/ui/Button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/Tabs';
 import { ContentCard, ContentFilters, ContentEditor } from '../components/content';
+import { usePosts, usePostStats, usePostMutations } from '../hooks/convex/usePosts';
+import type { Id } from '../../convex/_generated/dataModel';
 
-// Mock data for content items
-const mockContent = [
-  {
-    id: '1',
-    title: 'Product Launch Announcement',
-    content:
-      "🚀 Exciting news! We're thrilled to unveil our latest product that's going to revolutionize the way you work. Stay tuned for more details!",
-    mediaUrl: 'https://images.unsplash.com/photo-1551434678-e076c223a692?w=800',
-    mediaType: 'image' as const,
-    platforms: ['instagram', 'facebook', 'linkedin'],
-    status: 'scheduled' as const,
-    scheduledAt: '2024-01-20T10:00:00',
-  },
-  {
-    id: '2',
-    title: 'Behind the Scenes',
-    content:
-      'Take a peek behind the curtain! 👀 Our team has been working hard to bring you something special. #BehindTheScenes #TeamWork',
-    mediaUrl: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800',
-    mediaType: 'image' as const,
-    platforms: ['instagram', 'twitter'],
-    status: 'published' as const,
-    publishedAt: '2024-01-15T14:30:00',
-    metrics: {
-      views: 12500,
-      likes: 892,
-      comments: 47,
-      shares: 23,
-    },
-  },
-  {
-    id: '3',
-    title: 'Weekly Tips',
-    content:
-      '💡 Pro tip of the week: Consistency is key in social media marketing. Post regularly and engage with your audience daily.',
-    platforms: ['twitter', 'linkedin'],
-    status: 'draft' as const,
-  },
-  {
-    id: '4',
-    title: 'Customer Success Story',
-    content:
-      "We love hearing from our customers! Check out this amazing success story from @acmecorp. They increased their engagement by 150% using our platform! 📈",
-    mediaUrl: 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=800',
-    mediaType: 'image' as const,
-    platforms: ['facebook', 'linkedin'],
-    status: 'published' as const,
-    publishedAt: '2024-01-12T09:00:00',
-    metrics: {
-      views: 8900,
-      likes: 456,
-      comments: 28,
-      shares: 67,
-    },
-  },
-  {
-    id: '5',
-    title: 'Industry News Update',
-    content:
-      '📰 Breaking: Major changes coming to social media algorithms in 2024. Here\'s what you need to know to stay ahead...',
-    platforms: ['twitter'],
-    status: 'failed' as const,
-    scheduledAt: '2024-01-18T16:00:00',
-  },
-  {
-    id: '6',
-    title: 'Team Spotlight',
-    content:
-      '🌟 Meet Sarah, our incredible head of customer success! Sarah has helped over 500 clients achieve their social media goals.',
-    mediaUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=800',
-    mediaType: 'image' as const,
-    platforms: ['instagram', 'linkedin'],
-    status: 'scheduled' as const,
-    scheduledAt: '2024-01-22T11:00:00',
-  },
-];
-
-type ContentStatus = 'draft' | 'scheduled' | 'published' | 'failed' | 'pending_approval';
+type ContentStatus = 'draft' | 'scheduled' | 'published' | 'failed';
 
 type ContentItem = {
   id: string;
@@ -118,64 +43,126 @@ export function Content() {
     end: string | null;
   }>({ start: null, end: null });
 
+  // Convex data
+  const posts = usePosts();
+  const postStats = usePostStats();
+  const { createPost, updatePost, deletePost, duplicatePost } = usePostMutations();
+
+  // Transform Convex posts to ContentItem format
+  type RawPost = { _id: string; title?: string; content: string; mediaUrls?: string[]; mediaType?: string; platforms: string[]; status: string; scheduledAt?: number; publishedAt?: number };
+  const contentItems: ContentItem[] = useMemo(() => {
+    if (!posts) return [];
+    return posts.map((post: RawPost) => ({
+      id: post._id,
+      title: post.title || '',
+      content: post.content,
+      mediaUrl: post.mediaUrls?.[0],
+      mediaType: post.mediaType as 'image' | 'video' | undefined,
+      platforms: post.platforms,
+      status: post.status as ContentStatus,
+      scheduledAt: post.scheduledAt ? new Date(post.scheduledAt).toISOString() : undefined,
+      publishedAt: post.publishedAt ? new Date(post.publishedAt).toISOString() : undefined,
+    }));
+  }, [posts]);
+
   // Filter content based on active filters
-  const filteredContent = mockContent.filter((item) => {
-    // Search filter
-    if (
-      searchQuery &&
-      !item.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !item.content.toLowerCase().includes(searchQuery.toLowerCase())
-    ) {
-      return false;
-    }
+  const filteredContent: ContentItem[] = useMemo(() => {
+    return contentItems.filter((item: ContentItem) => {
+      // Search filter
+      if (
+        searchQuery &&
+        !item.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !item.content.toLowerCase().includes(searchQuery.toLowerCase())
+      ) {
+        return false;
+      }
 
-    // Status filter
-    if (selectedStatus && item.status !== selectedStatus) {
-      return false;
-    }
+      // Status filter
+      if (selectedStatus && item.status !== selectedStatus) {
+        return false;
+      }
 
-    // Platform filter
-    if (
-      selectedPlatforms.length > 0 &&
-      !item.platforms.some((p) => selectedPlatforms.includes(p))
-    ) {
-      return false;
-    }
+      // Platform filter
+      if (
+        selectedPlatforms.length > 0 &&
+        !item.platforms.some((p: string) => selectedPlatforms.includes(p))
+      ) {
+        return false;
+      }
 
-    return true;
-  });
+      return true;
+    });
+  }, [contentItems, searchQuery, selectedStatus, selectedPlatforms]);
 
   const handleEdit = (id: string) => {
-    const content = mockContent.find((c) => c.id === id);
+    const content = contentItems.find((c: ContentItem) => c.id === id);
     if (content) {
       setEditingContent(content);
       setIsEditorOpen(true);
     }
   };
 
-  const handleDuplicate = (id: string) => {
-    const content = mockContent.find((c) => c.id === id);
-    if (content) {
-      const duplicate: ContentItem = {
-        ...content,
-        id: `${content.id}-copy-${Date.now()}`,
-        title: `${content.title} (Copy)`,
-        status: 'draft',
-      };
-      setEditingContent(duplicate);
-      setIsEditorOpen(true);
+  const handleDuplicate = async (id: string) => {
+    try {
+      await duplicatePost({ postId: id as Id<'posts'> });
+    } catch (error) {
+      console.error('Failed to duplicate post:', error);
     }
   };
 
-  const handleDelete = (id: string) => {
-    // TODO: Implement delete with confirmation modal
-    console.log('Delete:', id);
+  const handleDelete = async (id: string) => {
+    if (confirm('Are you sure you want to delete this post?')) {
+      try {
+        await deletePost({ postId: id as Id<'posts'> });
+      } catch (error) {
+        console.error('Failed to delete post:', error);
+      }
+    }
   };
 
-  const handleSave = (data: any) => {
-    // TODO: Implement save to backend
-    console.log('Save:', data);
-    setEditingContent(null);
+  const handleSave = async (data: {
+    title?: string;
+    content: string;
+    platforms: string[];
+    status: string;
+    scheduledAt?: string;
+    mediaUrls?: string[];
+    mediaType?: string;
+    hashtags?: string[];
+  }) => {
+    try {
+      if (editingContent) {
+        // Update existing post
+        await updatePost({
+          postId: editingContent.id as Id<'posts'>,
+          title: data.title,
+          content: data.content,
+          platforms: data.platforms,
+          status: data.status,
+          scheduledAt: data.scheduledAt ? new Date(data.scheduledAt).getTime() : undefined,
+          mediaUrls: data.mediaUrls,
+          mediaType: data.mediaType,
+          hashtags: data.hashtags,
+        });
+      } else {
+        // Create new post
+        await createPost({
+          title: data.title,
+          content: data.content,
+          platforms: data.platforms,
+          status: data.status,
+          scheduledAt: data.scheduledAt ? new Date(data.scheduledAt).getTime() : undefined,
+          mediaUrls: data.mediaUrls,
+          mediaType: data.mediaType,
+          hashtags: data.hashtags,
+          wasAiGenerated: false,
+        });
+      }
+      setIsEditorOpen(false);
+      setEditingContent(null);
+    } catch (error) {
+      console.error('Failed to save post:', error);
+    }
   };
 
   const handleNewContent = () => {
@@ -183,13 +170,26 @@ export function Content() {
     setIsEditorOpen(true);
   };
 
-  // Stats
+  // Stats from Convex
   const stats = {
-    total: mockContent.length,
-    draft: mockContent.filter((c) => c.status === 'draft').length,
-    scheduled: mockContent.filter((c) => c.status === 'scheduled').length,
-    published: mockContent.filter((c) => c.status === 'published').length,
+    total: postStats?.total ?? 0,
+    draft: postStats?.drafts ?? 0,
+    scheduled: postStats?.scheduled ?? 0,
+    published: postStats?.published ?? 0,
   };
+
+  // Loading state
+  const isLoading = posts === undefined;
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -287,7 +287,7 @@ export function Content() {
                     : 'space-y-4'
                 }
               >
-                {filteredContent.map((item) => (
+                {filteredContent.map((item: ContentItem) => (
                   <ContentCard
                     key={item.id}
                     {...item}
@@ -321,8 +321,8 @@ export function Content() {
               }
             >
               {filteredContent
-                .filter((item) => item.status === 'draft')
-                .map((item) => (
+                .filter((item: ContentItem) => item.status === 'draft')
+                .map((item: ContentItem) => (
                   <ContentCard
                     key={item.id}
                     {...item}
@@ -343,8 +343,8 @@ export function Content() {
               }
             >
               {filteredContent
-                .filter((item) => item.status === 'scheduled')
-                .map((item) => (
+                .filter((item: ContentItem) => item.status === 'scheduled')
+                .map((item: ContentItem) => (
                   <ContentCard
                     key={item.id}
                     {...item}
@@ -365,8 +365,8 @@ export function Content() {
               }
             >
               {filteredContent
-                .filter((item) => item.status === 'published')
-                .map((item) => (
+                .filter((item: ContentItem) => item.status === 'published')
+                .map((item: ContentItem) => (
                   <ContentCard
                     key={item.id}
                     {...item}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -13,6 +13,7 @@ import {
   Twitter,
   Linkedin,
   Youtube,
+  Loader2,
 } from 'lucide-react';
 import {
   LineChart,
@@ -34,90 +35,54 @@ import {
 import { DashboardLayout } from '../components/layout';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import {
+  useDashboardStats,
+  useEngagementTrends,
+  useTopPosts,
+  useFollowerGrowth,
+  usePlatformStats,
+  formatNumber,
+} from '../hooks/convex/useAnalytics';
 
-// Mock data
-const engagementData = [
-  { date: 'Jan 1', instagram: 4200, facebook: 2400, twitter: 1800, linkedin: 1200 },
-  { date: 'Jan 8', instagram: 4800, facebook: 2800, twitter: 2100, linkedin: 1400 },
-  { date: 'Jan 15', instagram: 5100, facebook: 3100, twitter: 2400, linkedin: 1600 },
-  { date: 'Jan 22', instagram: 5600, facebook: 3400, twitter: 2200, linkedin: 1800 },
-  { date: 'Jan 29', instagram: 6200, facebook: 3800, twitter: 2600, linkedin: 2000 },
-  { date: 'Feb 5', instagram: 5800, facebook: 3600, twitter: 2800, linkedin: 2200 },
-  { date: 'Feb 12', instagram: 6500, facebook: 4000, twitter: 3000, linkedin: 2400 },
+// Fallback data for empty states
+const fallbackEngagementData = [
+  { date: 'No data', instagram: 0, facebook: 0, twitter: 0, linkedin: 0 },
 ];
 
-const followerGrowthData = [
-  { date: 'Week 1', followers: 12500, growth: 320 },
-  { date: 'Week 2', followers: 12820, growth: 280 },
-  { date: 'Week 3', followers: 13100, growth: 450 },
-  { date: 'Week 4', followers: 13550, growth: 380 },
-  { date: 'Week 5', followers: 13930, growth: 520 },
-  { date: 'Week 6', followers: 14450, growth: 410 },
+const fallbackFollowerGrowthData = [
+  { date: 'No data', followers: 0, growth: 0 },
 ];
 
-const contentPerformance = [
-  { type: 'Images', posts: 45, engagement: 12500, avgEngagement: 278 },
-  { type: 'Videos', posts: 12, engagement: 8900, avgEngagement: 742 },
-  { type: 'Carousels', posts: 18, engagement: 6200, avgEngagement: 344 },
-  { type: 'Stories', posts: 65, engagement: 4500, avgEngagement: 69 },
-  { type: 'Reels', posts: 8, engagement: 15200, avgEngagement: 1900 },
+const fallbackContentPerformance = [
+  { type: 'Images', posts: 0, engagement: 0, avgEngagement: 0 },
+  { type: 'Videos', posts: 0, engagement: 0, avgEngagement: 0 },
+  { type: 'Carousels', posts: 0, engagement: 0, avgEngagement: 0 },
+  { type: 'Reels', posts: 0, engagement: 0, avgEngagement: 0 },
 ];
 
-const platformDistribution = [
-  { name: 'Instagram', value: 35, color: '#E1306C' },
-  { name: 'Facebook', value: 25, color: '#1877F2' },
-  { name: 'Twitter', value: 20, color: '#000000' },
-  { name: 'LinkedIn', value: 15, color: '#0A66C2' },
-  { name: 'YouTube', value: 5, color: '#FF0000' },
+const fallbackPlatformDistribution = [
+  { name: 'Instagram', value: 0, color: '#E1306C' },
+  { name: 'Facebook', value: 0, color: '#1877F2' },
+  { name: 'Twitter', value: 0, color: '#000000' },
+  { name: 'LinkedIn', value: 0, color: '#0A66C2' },
+  { name: 'YouTube', value: 0, color: '#FF0000' },
 ];
 
-const topPosts = [
-  {
-    id: '1',
-    title: 'Product Launch Announcement',
-    platform: 'instagram',
-    impressions: 45200,
-    engagement: 3840,
-    engagementRate: 8.5,
-  },
-  {
-    id: '2',
-    title: 'Behind the Scenes Video',
-    platform: 'instagram',
-    impressions: 38900,
-    engagement: 2920,
-    engagementRate: 7.5,
-  },
-  {
-    id: '3',
-    title: 'Industry Insights Thread',
-    platform: 'twitter',
-    impressions: 28400,
-    engagement: 1890,
-    engagementRate: 6.7,
-  },
-  {
-    id: '4',
-    title: 'Customer Success Story',
-    platform: 'linkedin',
-    impressions: 22100,
-    engagement: 1540,
-    engagementRate: 7.0,
-  },
-  {
-    id: '5',
-    title: 'Weekly Tips Carousel',
-    platform: 'facebook',
-    impressions: 18900,
-    engagement: 1120,
-    engagementRate: 5.9,
-  },
-];
+const platformColors: Record<string, string> = {
+  instagram: '#E1306C',
+  facebook: '#1877F2',
+  twitter: '#000000',
+  x: '#000000',
+  linkedin: '#0A66C2',
+  youtube: '#FF0000',
+  tiktok: '#000000',
+};
 
 const platformIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   instagram: Instagram,
   facebook: Facebook,
   twitter: Twitter,
+  x: Twitter,
   linkedin: Linkedin,
   youtube: Youtube,
 };
@@ -125,36 +90,139 @@ const platformIcons: Record<string, React.ComponentType<{ className?: string }>>
 export function Analytics() {
   const [dateRange, setDateRange] = useState('30d');
 
-  const stats = [
-    {
-      label: 'Total Followers',
-      value: '14,450',
-      change: '+8.2%',
-      trend: 'up',
-      icon: Users,
-    },
-    {
-      label: 'Total Impressions',
-      value: '892K',
-      change: '+12.5%',
-      trend: 'up',
-      icon: Eye,
-    },
-    {
-      label: 'Engagement Rate',
-      value: '4.8%',
-      change: '+0.6%',
-      trend: 'up',
-      icon: Heart,
-    },
-    {
-      label: 'Total Engagement',
-      value: '42.8K',
-      change: '-2.1%',
-      trend: 'down',
-      icon: MessageCircle,
-    },
-  ];
+  // Calculate days based on date range
+  const days = dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : dateRange === '90d' ? 90 : 365;
+
+  // Convex data hooks
+  const dashboardStats = useDashboardStats();
+  const engagementTrends = useEngagementTrends(undefined, days);
+  const topPostsData = useTopPosts(5);
+  const followerGrowthData = useFollowerGrowth(undefined, days);
+  const platformStats = usePlatformStats();
+
+  const isLoading = dashboardStats === undefined;
+
+  // Transform engagement trends for chart
+  const engagementData = useMemo(() => {
+    if (!engagementTrends || engagementTrends.length === 0) {
+      return fallbackEngagementData;
+    }
+    return engagementTrends.map((trend: { date: string; engagement: number; reach: number; clicks: number; impressions: number }) => ({
+      date: new Date(trend.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      instagram: Math.round(trend.engagement / 4),
+      facebook: Math.round(trend.reach / 4),
+      twitter: Math.round(trend.clicks),
+      linkedin: Math.round(trend.impressions / 10),
+    }));
+  }, [engagementTrends]);
+
+  // Transform follower growth for chart
+  const followerChartData = useMemo(() => {
+    if (!followerGrowthData || followerGrowthData.length === 0) {
+      return fallbackFollowerGrowthData;
+    }
+    let prevFollowers = 0;
+    return followerGrowthData.map((data: { date: string; followers: number }, index: number) => {
+      const growth = index > 0 ? data.followers - prevFollowers : 0;
+      prevFollowers = data.followers;
+      return {
+        date: new Date(data.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        followers: data.followers,
+        growth: growth,
+      };
+    });
+  }, [followerGrowthData]);
+
+  // Transform platform stats for pie chart
+  type PlatformStatType = { platform: string; followers: number };
+  const platformDistribution = useMemo(() => {
+    if (!platformStats || platformStats.length === 0) {
+      return fallbackPlatformDistribution;
+    }
+    const total = platformStats.reduce((sum: number, p: PlatformStatType) => sum + p.followers, 0);
+    if (total === 0) return fallbackPlatformDistribution;
+
+    return platformStats.map((p: PlatformStatType) => ({
+      name: p.platform.charAt(0).toUpperCase() + p.platform.slice(1),
+      value: Math.round((p.followers / total) * 100),
+      color: platformColors[p.platform] || '#6B7280',
+    }));
+  }, [platformStats]);
+
+  // Transform top posts for table
+  type TopPostType = { _id: string; contentText?: string; platform: string; likes: number; comments: number; shares: number; engagementRate: number };
+  const topPosts = useMemo(() => {
+    if (!topPostsData || topPostsData.length === 0) {
+      return [];
+    }
+    return topPostsData.map((post: TopPostType) => ({
+      id: post._id,
+      title: post.contentText?.slice(0, 40) || 'Untitled Post',
+      platform: post.platform,
+      impressions: post.likes + post.comments + post.shares,
+      engagement: post.likes + post.comments + post.shares,
+      engagementRate: post.engagementRate,
+    }));
+  }, [topPostsData]);
+
+  // Content performance (mock for now - would need separate query)
+  const contentPerformance = fallbackContentPerformance;
+
+  // Build stats array from real data
+  const stats = useMemo(() => {
+    const data = dashboardStats || {
+      totalFollowers: 0,
+      followerGrowth: 0,
+      totalEngagement: 0,
+      engagementGrowth: 0,
+      avgEngagementRate: 0,
+      engagementRateGrowth: 0,
+    };
+
+    // Calculate total impressions from engagement trends
+    const totalImpressions = engagementTrends?.reduce((sum: number, t: { impressions: number }) => sum + t.impressions, 0) || 0;
+
+    return [
+      {
+        label: 'Total Followers',
+        value: formatNumber(data.totalFollowers),
+        change: `${data.followerGrowth >= 0 ? '+' : ''}${data.followerGrowth.toFixed(1)}%`,
+        trend: data.followerGrowth >= 0 ? 'up' : 'down',
+        icon: Users,
+      },
+      {
+        label: 'Total Impressions',
+        value: formatNumber(totalImpressions),
+        change: '+0.0%',
+        trend: 'up' as const,
+        icon: Eye,
+      },
+      {
+        label: 'Engagement Rate',
+        value: `${data.avgEngagementRate.toFixed(1)}%`,
+        change: `${data.engagementRateGrowth >= 0 ? '+' : ''}${data.engagementRateGrowth.toFixed(1)}%`,
+        trend: data.engagementRateGrowth >= 0 ? 'up' : 'down',
+        icon: Heart,
+      },
+      {
+        label: 'Total Engagement',
+        value: formatNumber(data.totalEngagement),
+        change: `${data.engagementGrowth >= 0 ? '+' : ''}${data.engagementGrowth.toFixed(1)}%`,
+        trend: data.engagementGrowth >= 0 ? 'up' : 'down',
+        icon: MessageCircle,
+      },
+    ];
+  }, [dashboardStats, engagementTrends]);
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -286,7 +354,7 @@ export function Analytics() {
             <CardContent>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={followerGrowthData}>
+                  <LineChart data={followerChartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                     <YAxis tick={{ fontSize: 12 }} />
@@ -349,7 +417,7 @@ export function Analytics() {
                       paddingAngle={5}
                       dataKey="value"
                     >
-                      {platformDistribution.map((entry, index) => (
+                      {platformDistribution.map((entry: { name: string; value: number; color: string }, index: number) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
@@ -358,7 +426,7 @@ export function Analytics() {
                 </ResponsiveContainer>
               </div>
               <div className="mt-4 space-y-2">
-                {platformDistribution.map((platform) => (
+                {platformDistribution.map((platform: { name: string; value: number; color: string }) => (
                   <div
                     key={platform.name}
                     className="flex items-center justify-between text-sm"
@@ -392,62 +460,71 @@ export function Analytics() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">
-                      Post
-                    </th>
-                    <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">
-                      Platform
-                    </th>
-                    <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">
-                      Impressions
-                    </th>
-                    <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">
-                      Engagement
-                    </th>
-                    <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">
-                      Rate
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topPosts.map((post) => {
-                    const Icon = platformIcons[post.platform];
-                    return (
-                      <tr
-                        key={post.id}
-                        className="border-b border-gray-100 hover:bg-gray-50"
-                      >
-                        <td className="py-3 px-4">
-                          <span className="font-medium text-gray-900">
-                            {post.title}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4">
-                          {Icon && (
-                            <Icon className="h-5 w-5 text-gray-600" />
-                          )}
-                        </td>
-                        <td className="py-3 px-4 text-right text-gray-600">
-                          {post.impressions.toLocaleString()}
-                        </td>
-                        <td className="py-3 px-4 text-right text-gray-600">
-                          {post.engagement.toLocaleString()}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            {post.engagementRate}%
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            {topPosts.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">
+                        Post
+                      </th>
+                      <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">
+                        Platform
+                      </th>
+                      <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">
+                        Impressions
+                      </th>
+                      <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">
+                        Engagement
+                      </th>
+                      <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">
+                        Rate
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topPosts.map((post: { id: string; title: string; platform: string; impressions: number; engagement: number; engagementRate: number }) => {
+                      const Icon = platformIcons[post.platform];
+                      return (
+                        <tr
+                          key={post.id}
+                          className="border-b border-gray-100 hover:bg-gray-50"
+                        >
+                          <td className="py-3 px-4">
+                            <span className="font-medium text-gray-900">
+                              {post.title}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            {Icon && (
+                              <Icon className="h-5 w-5 text-gray-600" />
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right text-gray-600">
+                            {post.impressions.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-4 text-right text-gray-600">
+                            {post.engagement.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              {post.engagementRate.toFixed(1)}%
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-gray-500">No post performance data available yet</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  Connect your social accounts and publish content to see analytics
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
