@@ -9,16 +9,24 @@ export const list = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    // Try to get authenticated user, fallback to demo user
+    let user = null;
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return [];
+
+    if (identity) {
+      user = await ctx.db
+        .query("users")
+        .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+        .first();
     }
 
-    // Get user by token identifier
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .first();
+    // Fallback to demo user if no auth
+    if (!user) {
+      user = await ctx.db
+        .query("users")
+        .withIndex("by_email", (q) => q.eq("email", "demo@socialsync.pro"))
+        .first();
+    }
 
     if (!user) {
       return [];
@@ -84,15 +92,24 @@ export const getScheduled = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    // Try to get authenticated user, fallback to demo user
+    let user = null;
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return [];
+
+    if (identity) {
+      user = await ctx.db
+        .query("users")
+        .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+        .first();
     }
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .first();
+    // Fallback to demo user if no auth
+    if (!user) {
+      user = await ctx.db
+        .query("users")
+        .withIndex("by_email", (q) => q.eq("email", "demo@socialsync.pro"))
+        .first();
+    }
 
     if (!user) {
       return [];
@@ -123,15 +140,24 @@ export const getDrafts = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    // Try to get authenticated user, fallback to demo user
+    let user = null;
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return [];
+
+    if (identity) {
+      user = await ctx.db
+        .query("users")
+        .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+        .first();
     }
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .first();
+    // Fallback to demo user if no auth
+    if (!user) {
+      user = await ctx.db
+        .query("users")
+        .withIndex("by_email", (q) => q.eq("email", "demo@socialsync.pro"))
+        .first();
+    }
 
     if (!user) {
       return [];
@@ -424,15 +450,24 @@ export const publish = mutation({
 export const getStats = query({
   args: {},
   handler: async (ctx) => {
+    // Try to get authenticated user, fallback to demo user
+    let user = null;
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return { total: 0, drafts: 0, scheduled: 0, published: 0 };
+
+    if (identity) {
+      user = await ctx.db
+        .query("users")
+        .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+        .first();
     }
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .first();
+    // Fallback to demo user if no auth
+    if (!user) {
+      user = await ctx.db
+        .query("users")
+        .withIndex("by_email", (q) => q.eq("email", "demo@socialsync.pro"))
+        .first();
+    }
 
     if (!user) {
       return { total: 0, drafts: 0, scheduled: 0, published: 0 };

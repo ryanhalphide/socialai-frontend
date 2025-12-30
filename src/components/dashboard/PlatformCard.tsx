@@ -11,7 +11,7 @@ import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { cn, formatNumber } from '../../lib/utils';
 
-type PlatformType = 'instagram' | 'facebook' | 'x' | 'linkedin' | 'tiktok' | 'youtube' | 'pinterest' | 'threads';
+type PlatformType = 'instagram' | 'facebook' | 'x' | 'twitter' | 'linkedin' | 'tiktok' | 'youtube' | 'pinterest' | 'threads';
 
 interface PlatformCardProps {
   platform: PlatformType;
@@ -42,6 +42,12 @@ const platformConfig: Record<PlatformType, {
   },
   x: {
     name: 'X (Twitter)',
+    icon: Twitter,
+    bgClass: 'bg-black',
+    textClass: 'text-white',
+  },
+  twitter: {
+    name: 'Twitter',
     icon: Twitter,
     bgClass: 'bg-black',
     textClass: 'text-white',
@@ -86,7 +92,7 @@ export function PlatformCard({
   postsThisWeek,
   isConnected,
 }: PlatformCardProps) {
-  const config = platformConfig[platform];
+  const config = platformConfig[platform] || platformConfig.instagram; // Fallback to Instagram for unknown platforms
   const Icon = config.icon;
 
   return (
