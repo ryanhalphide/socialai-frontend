@@ -16,12 +16,37 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Dev mode bypass - set to true to skip auth in development
+const DEV_BYPASS_AUTH = import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS_AUTH === 'true';
+
+const mockUser: User = {
+  id: 'dev-user-123',
+  email: 'dev@example.com',
+  app_metadata: {},
+  user_metadata: { full_name: 'Dev User' },
+  aud: 'authenticated',
+  created_at: new Date().toISOString(),
+} as User;
+
+const mockSession: Session = {
+  access_token: 'dev-token',
+  refresh_token: 'dev-refresh',
+  expires_in: 3600,
+  token_type: 'bearer',
+  user: mockUser,
+} as Session;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(DEV_BYPASS_AUTH ? mockUser : null);
+  const [session, setSession] = useState<Session | null>(DEV_BYPASS_AUTH ? mockSession : null);
+  const [isLoading, setIsLoading] = useState(!DEV_BYPASS_AUTH);
 
   useEffect(() => {
+    // Skip auth check if dev bypass is enabled
+    if (DEV_BYPASS_AUTH) {
+      return;
+    }
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
